@@ -189,6 +189,92 @@ if __name__ == "__main__":
     while True:
         try:
             check_all_zones()
+            check_convoicar()
         except Exception as e:
             print(f"[ERROR] {e}")
         time.sleep(CHECK_INTERVAL)
+
+
+# ============================================================
+#  CONVOICAR — SCRAPING HTML
+# ============================================================
+
+from bs4 import BeautifulSoup
+
+CONVOICAR_URL = "https://web.convoicar.fr/d/rides"
+CONVOICAR_COOKIE = "_ga=GA1.1.717503229.1750778451; remember_user_token=eyJfcmFpbHMiOnsibWVzc2FnZSI6Ilcxc3lOekV4WFN3aUpESmhKREV4SkdkelMyWm1VUzh6WXpjdk1FNWxTWFl6Um1wd1FuVWlMQ0l4Tnpjek1qVXpORGc0TGpJM016TTROeUpkIiwiZXhwIjoiMjAyNi0wMy0yNVQxODoyNDo0OC4yNzNaIiwicHVyIjpudWxsfX0%3D--516c78051777cc71cdbc81cb2469010f1eba6048; _argon_session=bVlUSjVWcm85Tk1Kcit2UDIxV3lFMDJ1VWlrdHVZc1pjNGMwUEdIM0FRWmlLTXBSdnlCemZ0bDNlVi9CaklmcmQvRXg3YXRVYjRub3d4bG1WN1dXYWh4QWVwaytyMEU3blkzOGRuMDMxVVBaNzVRZ21ZcXBINjdhb0dFWCtGSlRJM3A3dk4rdFVYb2FkQ2VGODVQWkN1ekNZMWM0Uk9zaFhRcjU0TmF4SlhkcGZPVm5Cc2lpS1NJQzN2NUxKREw3N3pSWmlrNUthU3F0bEtjSFIxT29ockFKK0xwN1Y4ZFFLYkh5WlBQVTFwd2dBMW1hcDZtTWRtNVUzU1JRVU1OK1hZRlVzUzhLc1l6Vk1tR1hjT1hGWVVFb2FEUXFTOTM2czNOaG5QTUJGMG53TjZQKzM3enF0Z2pudkQ5Um1ubFlJZzhhbXVEUHRadTFqMEV2TWFIdit0QU5vd0RTejR6VXl0RStTWE1aVE0wPS0tRHJLMlp4c1dyUXJNRDhBbWU3bnhvQT09--4dcac2e6a15c05e473f97dfc8b7047af6ecbc549"
+
+seen_convoicar_ids = set()
+
+
+def fetch_convoicar_missions():
+    headers = {
+        "Cookie": CONVOICAR_COOKIE,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "text/html,application/xhtml+xml",
+        "Referer": "https://web.convoicar.fr/",
+    }
+    try:
+        r = requests.get(CONVOICAR_URL, headers=headers, timeout=15)
+        r.raise_for_status()
+        return r.text
+    except Exception as e:
+        print(f"[CONVOICAR ERROR] {e}")
+        return None
+
+
+def parse_convoicar_missions(html):
+    soup = BeautifulSoup(html, "html.parser")
+    missions = []
+    # Cherche les blocs de missions
+    cards = soup.find_all("div", class_=lambda c: c and "ride" in c.lower())
+    if not cards:
+        # Fallback: cherche les liens avec /d/rides/
+        cards = soup.find_all("a", href=lambda h: h and "/d/rides/" in h)
+    for card in cards:
+        text = card.get_text(separator=" ", strip=True)
+        href = card.get("href", "") if card.name == "a" else ""
+        mission_id = href.split("/d/rides/")[-1].split("?")[0] if "/d/rides/" in href else None
+        if text and len(text) > 10:
+            missions.append({"id": mission_id, "text": text, "raw": card})
+    return missions
+
+
+def check_convoicar():
+    global seen_convoicar_ids
+    print(f"[CHECK] Convoicar a {datetime.now().strftime('%H:%M:%S')}")
+    html = fetch_convoicar_missions()
+    if not html:
+        return
+
+    soup = BeautifulSoup(html, "html.parser")
+    new_found = 0
+
+    # Cherche tous les liens de missions
+    links = soup.find_all("a", href=lambda h: h and "/d/rides/" in h)
+    seen_hrefs = set()
+
+    for link in links:
+        href = link.get("href", "")
+        if href in seen_hrefs:
+            continue
+        seen_hrefs.add(href)
+
+        mission_id = href.split("/d/rides/")[-1].strip("/").split("?")[0]
+        if not mission_id or mission_id in seen_convoicar_ids:
+            continue
+
+        # Remonte au bloc parent pour extraire les infos
+        parent = link.find_parent("div") or link
+        text = parent.get_text(separator=" | ", strip=True)
+
+        seen_convoicar_ids.add(mission_id)
+        msg = f"CONVOICAR\n{text[:300]}"
+        send_telegram(msg)
+        print(f"  OK Notif Convoicar #{mission_id}")
+        new_found += 1
+
+    if new_found == 0:
+        print("  Aucune nouvelle mission Convoicar.")
+
+
