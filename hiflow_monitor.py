@@ -42,6 +42,7 @@ ZONES = [
 
 seen_hiflow_ids = set()
 seen_convoicar_ids = set()
+convoicar_first_run = True
 
 
 # ============================================================
@@ -165,6 +166,7 @@ def check_hiflow():
 
             seen_hiflow_ids.add(mid)
             msg = format_hiflow_mission(mission)
+            msg += f" | {zone['name']}"
             send_telegram(msg)
             print(f"  OK Notif Hiflow #{mid} ({distance} km)")
             new_found += 1
@@ -178,7 +180,7 @@ def check_hiflow():
 # ============================================================
 
 def check_convoicar():
-    global seen_convoicar_ids
+    global seen_convoicar_ids, convoicar_first_run
     print(f"[CHECK] Convoicar a {datetime.now().strftime('%H:%M:%S')}")
 
     headers = {
@@ -200,6 +202,7 @@ def check_convoicar():
     seen_hrefs = set()
 
     links = soup.find_all("a", href=lambda h: h and "/d/rides/" in h)
+    print(f"  -> {len(links)} lien(s) missions trouve(s)")
 
     for link in links:
         href = link.get("href", "")
@@ -213,13 +216,20 @@ def check_convoicar():
         if mission_id in seen_convoicar_ids:
             continue
 
-        parent = link.find_parent("div") or link
+        # Remonte au bloc parent pour extraire les infos
+        parent = link.find_parent("tr") or link.find_parent("div") or link
         text = parent.get_text(separator=" | ", strip=True)[:300]
 
         seen_convoicar_ids.add(mission_id)
-        send_telegram(f"CONVOICAR\n{text}")
-        print(f"  OK Notif Convoicar #{mission_id}")
-        new_found += 1
+
+        if not convoicar_first_run:
+            send_telegram(f"CONVOICAR\n{text}")
+            print(f"  OK Notif Convoicar #{mission_id}")
+            new_found += 1
+        else:
+            print(f"  [INIT] Convoicar #{mission_id} enregistre sans notif")
+
+    convoicar_first_run = False
 
     if new_found == 0:
         print("  Aucune nouvelle mission Convoicar.")
