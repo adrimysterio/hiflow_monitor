@@ -222,12 +222,9 @@ def check_convoicar():
 
         seen_convoicar_ids.add(mission_id)
 
-        if not convoicar_first_run:
-            send_telegram(f"CONVOICAR\n{text}")
-            print(f"  OK Notif Convoicar #{mission_id}")
-            new_found += 1
-        else:
-            print(f"  [INIT] Convoicar #{mission_id} enregistre sans notif")
+        send_telegram(f"CONVOICAR\n{text}")
+        print(f"  OK Notif Convoicar #{mission_id}")
+        new_found += 1
 
     convoicar_first_run = False
 
