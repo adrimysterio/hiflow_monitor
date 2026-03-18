@@ -33,6 +33,18 @@ ZONES = [
         "min_distance_km": 200,
     },
     {
+        "name": "Oise Depart",
+        "department_start": "60",
+        "active_always": True,
+        "min_distance_km": 200,
+    },
+    {
+        "name": "Oise Arrivee",
+        "department_end": "60",
+        "active_always": True,
+        "min_distance_km": 200,
+    },
+    {
         "name": "Toulouse",
         "region_start": "occitanie",
         "active_until": "2026-03-22",
@@ -78,6 +90,10 @@ def build_hiflow_url(zone):
         params["region_start"] = zone["region_start"]
     if "region_end" in zone:
         params["region_end"] = zone["region_end"]
+    if "department_start" in zone:
+        params["department_start"] = zone["department_start"]
+    if "department_end" in zone:
+        params["department_end"] = zone["department_end"]
     query = "&".join(f"{k}={v}" for k, v in params.items())
     return f"{base}?{query}"
 
@@ -220,10 +236,27 @@ def check_convoicar():
         parent = link.find_parent("tr") or link.find_parent("div") or link
         text = parent.get_text(separator=" | ", strip=True)[:300]
 
+        # Filtre prix >= 100€
+        import re
+        prices = re.findall(r"(\d+)[,.]?(\d*)\s*EUR|€", text)
+        nums = re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:€|EUR)", text)
+        max_price = 0
+        for n in nums:
+            try:
+                val = float(n.replace(",", "."))
+                if val > max_price:
+                    max_price = val
+            except:
+                pass
+
         seen_convoicar_ids.add(mission_id)
 
+        if max_price > 0 and max_price < 100:
+            print(f"  [SKIP] Convoicar #{mission_id} : {max_price}EUR < 100EUR")
+            continue
+
         send_telegram(f"CONVOICAR\n{text}")
-        print(f"  OK Notif Convoicar #{mission_id}")
+        print(f"  OK Notif Convoicar #{mission_id} ({max_price}EUR)")
         new_found += 1
 
     convoicar_first_run = False
