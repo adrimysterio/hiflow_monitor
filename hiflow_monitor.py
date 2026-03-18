@@ -21,16 +21,22 @@ CHECK_INTERVAL = 60  # secondes
 
 ZONES = [
     {
-        "name": "Paris / Ile-de-France",
+        "name": "IDF Depart",
+        "region_start": "Ile-de-france",
+        "active_always": True,
+        "min_distance_km": 200,
+    },
+    {
+        "name": "IDF Arrivee",
         "region_end": "Ile-de-france",
         "active_always": True,
-        "min_distance_km": 200,  # missions >= 200 km uniquement
+        "min_distance_km": 200,
     },
     {
         "name": "Toulouse",
         "region_start": "occitanie",
         "active_until": "2026-03-22",
-        "date_filter": "20260320",  # uniquement le 20/03/2026
+        "date_filter": "20260320",
     },
 ]
 
@@ -62,10 +68,10 @@ def build_url(zone):
         "limit": "0,50",
         "extra_info": "tableJourneyList_1",
     }
+    if "region_start" in zone:
+        params["region_start"] = zone["region_start"]
     if "region_end" in zone:
         params["region_end"] = zone["region_end"]
-    if "region_start" in zone:
-        params["department_start"] = zone["region_start"]
     query = "&".join(f"{k}={v}" for k, v in params.items())
     return f"{base}?{query}"
 
