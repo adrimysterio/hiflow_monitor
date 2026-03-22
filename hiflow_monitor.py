@@ -274,7 +274,7 @@ if __name__ == "__main__":
     # Remise a zero au demarrage pour envoyer toutes les missions existantes
     seen_convoicar_ids.clear()
     print("Hiflow + Convoicar Monitor demarre !")
-    send_telegram("Monitor demarre !\n- Hiflow IDF >= 200km\n- Hiflow Toulouse 20/03\n- Convoicar toutes missions")
+    send_telegram("Monitor demarre !\n- Hiflow IDF depart+arrivee >= 200km\n- Hiflow Oise (60) depart+arrivee >= 200km\n- Hiflow Marseille/Aix depart 30/03 >= 300km\n- Convoicar >= 100EUR")
 
     while True:
         try:
