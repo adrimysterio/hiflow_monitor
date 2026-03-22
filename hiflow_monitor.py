@@ -45,10 +45,11 @@ ZONES = [
         "min_distance_km": 200,
     },
     {
-        "name": "Toulouse",
-        "region_start": "occitanie",
-        "active_until": "2026-03-22",
-        "date_filter": "20260320",
+        "name": "Marseille/Aix Depart",
+        "department_start": "13",
+        "active_until": "2026-03-30",
+        "date_filter": "20260330",
+        "min_distance_km": 300,
     },
 ]
 
