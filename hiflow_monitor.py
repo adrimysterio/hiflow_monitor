@@ -131,8 +131,10 @@ def format_hiflow_mission(mission):
         else:
             date = "?"
         distance = mission.get("distance_km", "?")
-        prix = mission.get("pricing", {}).get("conveyor_price", "?")
-        return f"{depart} -> {arrivee} | {date} | {distance} km | {prix} EUR"
+        prix_base = mission.get("pricing", {}).get("conveyor_price", "?")
+        prix_instant = mission.get("pricing", {}).get("instant_booking_cost", None)
+        prix_str = f"{prix_instant} EUR" if prix_instant else f"{prix_base} EUR"
+        return f"{depart} -> {arrivee} | {date} | {distance} km | {prix_str}"
     except Exception:
         return "Nouvelle mission Hiflow disponible !"
 
