@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup
 TELEGRAM_TOKEN = "8621167866:AAEzwgq2nQiBjKftLmxbjqUgcZal-dKssMQ"
 TELEGRAM_CHAT_ID = "-5099081999"
 
-HIFLOW_COOKIE = "conveyor_session_id=CONVEYOR_27170_ac4bc295548248a5dbeed22864fc9cbef1892094a90fb9fdf811c131b6ee5dc3"
+HIFLOW_COOKIE = "conveyor_session_id=CONVEYOR_27170_c1c8d3b39587ae99f649b21ba9261ff26f3b5a4ce73a0f941114814962b75418"
 HIFLOW_AUTHOR_ID = "27170"
 
 CONVOICAR_URL = "https://web.convoicar.fr/d/rides"
