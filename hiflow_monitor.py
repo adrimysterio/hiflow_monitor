@@ -3,6 +3,8 @@ import time
 import json
 from datetime import datetime
 from bs4 import BeautifulSoup
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # ============================================================
 #  CONFIGURATION
@@ -44,12 +46,28 @@ ZONES = [
         "active_always": True,
         "min_distance_km": 200,
     },
-
 ]
 
 seen_hiflow_ids = set()
 seen_convoicar_ids = set()
 convoicar_first_run = True
+
+
+# ============================================================
+#  SERVEUR HTTP (pour garder Render actif)
+# ============================================================
+
+class PingHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"OK")
+    def log_message(self, format, *args):
+        pass
+
+def start_server():
+    server = HTTPServer(("0.0.0.0", 10000), PingHandler)
+    server.serve_forever()
 
 
 # ============================================================
@@ -227,18 +245,13 @@ def check_convoicar():
         seen_hrefs.add(href)
 
         mission_id = href.split("/d/rides/")[-1].strip("/").split("?")[0]
-        if not mission_id or not mission_id.isdigit():
-            continue
-        if mission_id in seen_convoicar_ids:
+        if not mission_id or mission_id in seen_convoicar_ids:
             continue
 
-        # Remonte au bloc parent pour extraire les infos
         parent = link.find_parent("tr") or link.find_parent("div") or link
         text = parent.get_text(separator=" | ", strip=True)[:300]
 
-        # Filtre prix >= 100€
         import re
-        prices = re.findall(r"(\d+)[,.]?(\d*)\s*EUR|€", text)
         nums = re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:€|EUR)", text)
         max_price = 0
         for n in nums:
@@ -253,6 +266,10 @@ def check_convoicar():
 
         if max_price > 0 and max_price < 100:
             print(f"  [SKIP] Convoicar #{mission_id} : {max_price}EUR < 100EUR")
+            continue
+
+        if convoicar_first_run:
+            print(f"  [INIT] Convoicar #{mission_id} enregistre sans notif")
             continue
 
         lien = f"https://web.convoicar.fr/d/rides/{mission_id}"
@@ -271,7 +288,11 @@ def check_convoicar():
 # ============================================================
 
 if __name__ == "__main__":
-    # Remise a zero au demarrage pour envoyer toutes les missions existantes
+    # Serveur HTTP pour garder Render actif
+    t = threading.Thread(target=start_server, daemon=True)
+    t.start()
+    print("Serveur HTTP demarre sur port 10000")
+
     seen_convoicar_ids.clear()
     print("Hiflow + Convoicar Monitor demarre !")
     send_telegram("Monitor demarre !\n- Hiflow IDF depart+arrivee >= 200km 🔥 si +400km\n- Hiflow Oise (60) depart+arrivee >= 200km\n- Convoicar >= 100EUR 🍑")
