@@ -13,7 +13,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 TELEGRAM_TOKEN = "8621167866:AAEzwgq2nQiBjKftLmxbjqUgcZal-dKssMQ"
 TELEGRAM_CHAT_ID = "-5099081999"
 
-HIFLOW_COOKIE = "conveyor_session_id=CONVEYOR_27170_4fb113d180a8a62edf4e169afae8d220961bcbb55ac72c565b0b0ca6211713d3"
+HIFLOW_COOKIE = "conveyor_session_id=CONVEYOR_27170_7f7baf285106f8501882c0bd6660351ed3818121992836bee7fba15472cade0e"
 HIFLOW_AUTHOR_ID = "27170"
 
 CONVOICAR_URL = "https://web.convoicar.fr/d/rides"
