@@ -1,10 +1,9 @@
 import requests
 import time
 import json
+import os
 from datetime import datetime
 from bs4 import BeautifulSoup
-import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # ============================================================
 #  CONFIGURATION
@@ -13,13 +12,12 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 TELEGRAM_TOKEN = "8621167866:AAEzwgq2nQiBjKftLmxbjqUgcZal-dKssMQ"
 TELEGRAM_CHAT_ID = "-5099081999"
 
-HIFLOW_COOKIE = "conveyor_session_id=CONVEYOR_27170_59ab9241b0d535d790da4ef968ea42a32330e947c21f7ebd80a73b8f1b9e017f"
+HIFLOW_EMAIL = os.environ.get("HIFLOW_EMAIL", "adrien.hurdubae@gmail.com")
+HIFLOW_PASSWORD = os.environ.get("HIFLOW_PASSWORD", "joogi705po")
 HIFLOW_AUTHOR_ID = "27170"
 
-CONVOICAR_URL = "https://web.convoicar.fr/d/rides"
-CONVOICAR_COOKIE = "_ga=GA1.1.717503229.1750778451; _ga_T0R12Z97Q9=GS2.2.s1751646099$o13$g1$t1751646104$j55$l0$h0; _ga_0KW2L0C87L=GS2.1.s1751656253$o14$g0$t1751656253$j60$l0$h0; remember_user_token=eyJfcmFpbHMiOnsibWVzc2FnZSI6Ilcxc3lOekV4WFN3aUpESmhKREV4SkdkelMyWm1VUzh6WXpjdk1FNWxTWFl6Um1wd1FuVWlMQ0l4TnpjME5EYzBNVEUxTGpRek1EVTVPRE1pWFE9PSIsImV4cCI6IjIwMjYtMDQtMDhUMjA6Mjg6MzUuNDMwWiIsInB1ciI6bnVsbH19--7bb014f4669bb5045c6ab21b0dbd4f332f94e200; _argon_session=N0NFTTdXczZVYS96ZjU3enljenpnQWhKemo3WVdTbjZobzBuQ1ZYZm4wVDVrUkNPdUo5VW85M1ZkT1ZTd1FYMlg0UmJMallJOVBGMDV1eHJDOFRDZDU0RHoybW95K0JaQlhsV1R0N2s4elZwamNxcXJkbUlyTHVwaDdTTkk1Z0J2RmdtdGc1NHJJNXMveklMZTMwNEZWL0dseE5FMGw0bXEzdFlxOW9hOHNtSTJ5dTF0UU9jZEtROEkvL1M0dnAxTnMwa29TMVd5SzFRdHlaYlVZVG1WRXVpT3Exc1Y1UjdqTE1xcElreG9Xa2Z0RklQeTl3TWNYOElQN1dEOW44dDNyT3FPdFgraDVhRTZIbkJ0TzgrNmxrVnVLL1VOd2FOdXlNcW9xYStYcEIxRURyYXdTZ3BVUnZjdUhiTm56UFZIQlgveW9tcGhnM3p3QVVMU010a2RadXlyTGY1RE41cDNwOU5LcU16OGJ3PS0tdVo0Z3hMOWhmSjVCczMrS1FUdEE0QT09--0c8f8dc9be2f08069331b973f2c1a8bd56dfa4bc"
-
 CHECK_INTERVAL = 60
+COOKIE_REFRESH_INTERVAL = 3600  # renouvelle le cookie toutes les heures
 
 ZONES = [
     {
@@ -49,25 +47,8 @@ ZONES = [
 ]
 
 seen_hiflow_ids = set()
-seen_convoicar_ids = set()
-convoicar_first_run = True
-
-
-# ============================================================
-#  SERVEUR HTTP (pour garder Render actif)
-# ============================================================
-
-class PingHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"OK")
-    def log_message(self, format, *args):
-        pass
-
-def start_server():
-    server = HTTPServer(("0.0.0.0", 10000), PingHandler)
-    server.serve_forever()
+hiflow_cookie = None
+last_cookie_refresh = 0
 
 
 # ============================================================
@@ -82,6 +63,66 @@ def send_telegram(message):
         r.raise_for_status()
     except Exception as e:
         print(f"[TELEGRAM ERROR] {e}")
+
+
+# ============================================================
+#  CONNEXION HIFLOW — renouvellement auto du cookie
+# ============================================================
+
+def login_hiflow():
+    global hiflow_cookie, last_cookie_refresh
+    print(f"[LOGIN] Connexion Hiflow en cours...")
+    
+    session = requests.Session()
+    
+    # Page de login pour récupérer le token CSRF
+    try:
+        r = session.get("https://partenaire.expedicar.com/conveyor/sign_in", timeout=15)
+        soup = BeautifulSoup(r.text, "html.parser")
+        csrf = soup.find("input", {"name": "authenticity_token"})
+        if not csrf:
+            print("[LOGIN ERROR] Token CSRF introuvable")
+            return False
+        csrf_token = csrf["value"]
+    except Exception as e:
+        print(f"[LOGIN ERROR] {e}")
+        return False
+
+    # Connexion
+    try:
+        payload = {
+            "conveyor[email]": HIFLOW_EMAIL,
+            "conveyor[password]": HIFLOW_PASSWORD,
+            "authenticity_token": csrf_token,
+        }
+        r = session.post(
+            "https://partenaire.expedicar.com/conveyor/sign_in",
+            data=payload,
+            timeout=15,
+            allow_redirects=True
+        )
+        
+        # Récupère le cookie de session
+        cookie_val = session.cookies.get("conveyor_session_id")
+        if cookie_val:
+            hiflow_cookie = f"conveyor_session_id={cookie_val}"
+            last_cookie_refresh = time.time()
+            print(f"[LOGIN] Cookie renouvelé avec succès !")
+            return True
+        else:
+            print("[LOGIN ERROR] Pas de cookie dans la réponse — identifiants incorrects ?")
+            return False
+    except Exception as e:
+        print(f"[LOGIN ERROR] {e}")
+        return False
+
+
+def get_hiflow_cookie():
+    global hiflow_cookie, last_cookie_refresh
+    # Renouvelle si pas de cookie ou si plus d'1 heure
+    if not hiflow_cookie or (time.time() - last_cookie_refresh) > COOKIE_REFRESH_INTERVAL:
+        login_hiflow()
+    return hiflow_cookie
 
 
 # ============================================================
@@ -112,9 +153,14 @@ def build_hiflow_url(zone):
 
 
 def fetch_hiflow_missions(zone):
+    cookie = get_hiflow_cookie()
+    if not cookie:
+        print(f"[HIFLOW] Pas de cookie disponible")
+        return None
+    
     url = build_hiflow_url(zone)
     headers = {
-        "Cookie": HIFLOW_COOKIE,
+        "Cookie": cookie,
         "Author-Id": HIFLOW_AUTHOR_ID,
         "Author-Type": "conveyor",
         "Accept": "application/json, text/javascript, */*; q=0.01",
@@ -123,9 +169,16 @@ def fetch_hiflow_missions(zone):
     try:
         r = requests.get(url, headers=headers, timeout=15)
         r.raise_for_status()
-        return r.json()
+        data = r.json()
+        # Si réponse invalide, forcer un nouveau login
+        if not isinstance(data, dict) or "response" not in data:
+            print(f"[HIFLOW] Réponse inattendue, renouvellement cookie...")
+            login_hiflow()
+            return None
+        return data
     except Exception as e:
         print(f"[HIFLOW ERROR] {zone['name']} : {e}")
+        login_hiflow()
         return None
 
 
@@ -210,97 +263,21 @@ def check_hiflow():
 
 
 # ============================================================
-#  CONVOICAR
-# ============================================================
-
-def check_convoicar():
-    global seen_convoicar_ids, convoicar_first_run
-    print(f"[CHECK] Convoicar a {datetime.now().strftime('%H:%M:%S')}")
-
-    headers = {
-        "Cookie": CONVOICAR_COOKIE,
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "text/html,application/xhtml+xml",
-        "Referer": "https://web.convoicar.fr/",
-    }
-    try:
-        r = requests.get(CONVOICAR_URL, headers=headers, timeout=15)
-        r.raise_for_status()
-        html = r.text
-    except Exception as e:
-        print(f"[CONVOICAR ERROR] {e}")
-        return
-
-    soup = BeautifulSoup(html, "html.parser")
-    new_found = 0
-    seen_hrefs = set()
-
-    links = soup.find_all("a", href=lambda h: h and "/d/rides/" in h)
-    print(f"  -> {len(links)} lien(s) missions trouve(s)")
-
-    for link in links:
-        href = link.get("href", "")
-        if href in seen_hrefs:
-            continue
-        seen_hrefs.add(href)
-
-        mission_id = href.split("/d/rides/")[-1].strip("/").split("?")[0]
-        if not mission_id or mission_id in seen_convoicar_ids:
-            continue
-
-        parent = link.find_parent("tr") or link.find_parent("div") or link
-        text = parent.get_text(separator=" | ", strip=True)[:300]
-
-        import re
-        nums = re.findall(r"(\d+(?:[.,]\d+)?)\s*(?:€|EUR)", text)
-        max_price = 0
-        for n in nums:
-            try:
-                val = float(n.replace(",", "."))
-                if val > max_price:
-                    max_price = val
-            except:
-                pass
-
-        seen_convoicar_ids.add(mission_id)
-
-        if max_price > 0 and max_price < 100:
-            print(f"  [SKIP] Convoicar #{mission_id} : {max_price}EUR < 100EUR")
-            continue
-
-        if convoicar_first_run:
-            print(f"  [INIT] Convoicar #{mission_id} enregistre sans notif")
-            continue
-
-        lien = f"https://web.convoicar.fr/d/rides/{mission_id}"
-        send_telegram(f"🍑 CONVOICAR | {max_price} EUR\n{text}\n{lien}")
-        print(f"  OK Notif Convoicar #{mission_id} ({max_price}EUR)")
-        new_found += 1
-
-    convoicar_first_run = False
-
-    if new_found == 0:
-        print("  Aucune nouvelle mission Convoicar.")
-
-
-# ============================================================
 #  LANCEMENT
 # ============================================================
 
 if __name__ == "__main__":
-    # Serveur HTTP pour garder Render actif
-    t = threading.Thread(target=start_server, daemon=True)
-    t.start()
-    print("Serveur HTTP demarre sur port 10000")
-
-    seen_convoicar_ids.clear()
-    print("Hiflow + Convoicar Monitor demarre !")
-    send_telegram("Monitor demarre !\n- Hiflow IDF depart+arrivee >= 200km 🔥 si +400km\n- Hiflow Oise (60) depart+arrivee >= 200km\n- Convoicar >= 100EUR 🍑")
+    print("Hiflow Monitor demarre !")
+    
+    # Connexion initiale
+    if login_hiflow():
+        send_telegram("Monitor demarre !\n- Hiflow IDF depart+arrivee >= 200km 🔥 si +400km\n- Hiflow Oise (60) depart+arrivee >= 200km\n- Cookie auto-renouvelé toutes les heures ✅")
+    else:
+        send_telegram("⚠️ Monitor demarre mais echec de connexion Hiflow !")
 
     while True:
         try:
             check_hiflow()
-            check_convoicar()
         except Exception as e:
             print(f"[ERROR] {e}")
         time.sleep(CHECK_INTERVAL)
